@@ -6,7 +6,7 @@
 class TuringMachine {
 public:
 
-    explicit TuringMachine(const TMProgram& program);
+    TuringMachine(const TMProgram& program);
 
     bool step();
 
@@ -15,6 +15,11 @@ public:
     bool halted() const;
 
     void reset();
+
+    const Tape& getTape1() const; // константная ссылка(нельзя менять)
+    const Tape& getTape2() const;
+
+    long getsteps() const;
 
 private:
 
