@@ -3,6 +3,8 @@
 #include "tape.h"
 #include "tm_program.h"
 
+#include <string>
+
 class TuringMachine {
 public:
 
@@ -20,6 +22,9 @@ public:
     const Tape& getTape2() const;
 
     long getsteps() const;
+
+    void loadTape1(const std::string& input);
+    void loadTape2(const std::string& input);
 
 private:
 

@@ -79,3 +79,26 @@ const Tape& TuringMachine::getTape2() const {
 long TuringMachine::getsteps() const {
     return steps;
 }
+
+void TuringMachine::loadTape1(const std::string& input){
+    tape1.reset();
+    for (int i=0; i < input.size(); i++){
+        tape1.write(input[i]);
+        tape1.moveRight();
+    }
+    while (tape1.getPosition() > 0){
+        tape1.moveLeft();
+    }
+}
+
+
+void TuringMachine::loadTape2(const std::string& input){
+    tape2.reset();
+    for (int i=0; i < input.size(); i++){
+        tape2.write(input[i]);
+        tape2.moveRight();
+    }
+    while (tape2.getPosition() > 0){
+        tape2.moveLeft();
+    }
+}
