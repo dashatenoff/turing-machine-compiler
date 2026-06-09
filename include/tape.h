@@ -1,6 +1,7 @@
 #pragma once
 
 #include <map>
+#include <string>
 
 class Tape {
 public:
@@ -18,6 +19,8 @@ public:
     long getPosition() const;
 
     void reset();
+
+    std::string toString() const;
 
 private:
 

@@ -1,4 +1,5 @@
 #include "tape.h"
+#include <string>
 
 Tape::Tape(char blank){
     head = 0;
@@ -33,5 +34,15 @@ char Tape::read() const{
 void Tape::reset(){
     head = 0;
     cells.clear();
+}
+
+std::string Tape::toString() const {
+    std::string result;
+    for (const std::pair<const long, char>& cell : cells){
+        if (cell.second != '_') {
+            result += cell.second;
+        }
+    }
+    return result;
 }
 
