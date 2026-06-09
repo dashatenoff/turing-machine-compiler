@@ -4,6 +4,7 @@ TuringMachine::TuringMachine(const TMProgram& program){
     this->program = program;
     currentState = program.startState;
     steps = 0;
+    loadTape1(program.tapeValue);
 }
 
 bool TuringMachine::step() {

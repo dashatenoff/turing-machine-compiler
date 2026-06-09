@@ -168,6 +168,8 @@ TMProgram
 Rule
 StateGenerator
 
+TMProgram также содержит исходное значение первой ленты (tapeValue).
+
 Compiler не должен предполагать внутреннее устройство лент.
 
 Взаимодействие с машиной осуществляется исключительно через генерацию правил.
@@ -394,3 +396,13 @@ add_wc_N
 while_cond_N
 while_body_N
 while_exit_N
+
+## TMProgram
+
+TMProgram содержит:
+
+- startState;
+- список правил rules;
+- исходное значение первой ленты tapeValue.
+
+Compiler возвращает полностью готовую к запуску программу.

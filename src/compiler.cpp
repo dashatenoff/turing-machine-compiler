@@ -32,7 +32,7 @@ TMProgram Compiler::compile(const ProgramNode& program) {
     addRule(last, '0', '1', '0', '1', Move::Stay, Move::Stay, StateGenerator::halt());
     addRule(last, '1', '1', '1', '1', Move::Stay, Move::Stay, StateGenerator::halt());
 
-    return { StateGenerator::start(), rules_ };
+    return { StateGenerator::start(), rules_, tapeValue_ };
 }
 
 //обход списка узлов возвращает финальное состояние после блока
