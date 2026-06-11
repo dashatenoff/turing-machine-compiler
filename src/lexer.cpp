@@ -44,7 +44,7 @@ std::vector<Token> Lexer::tokenize() {
         }
 
         //слово
-        if (std::isalpha((unsigned char)c) || c == '_') {
+        if (c != ':' && c != '#' && c != '\n' && c != '\r' && c != ' ' && c != '\t') {
             tokens.push_back(readWord());
             continue;
         }
@@ -76,7 +76,7 @@ Token Lexer::readWord() {
 
     while (!isAtEnd()) {
         char c = peek();
-        if (std::isalpha((unsigned char)c) || c == '_') {
+        if (c != ':' && c != '#' && c != '\n' && c != '\r' && c != ' ' && c != '\t') {
             word += advance();
         } else {
             break;
