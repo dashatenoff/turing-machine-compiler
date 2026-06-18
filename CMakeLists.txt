@@ -9,10 +9,9 @@ set(CMAKE_CXX_STANDARD 17)
 include_directories(include)
 
 # Общие исходники: ядро машины Тьюринга + компилятор мини-языка.
-# Их используют ОБЕ версии программы (и консольная, и графическая),
-# поэтому я собрала их в одну переменную COMMON, чтобы не перечислять
-# один и тот же список дважды. Заголовки тоже добавляю — тогда они
-# видны в дереве проекта в IDE.
+# Собрала их в одну переменную COMMON, чтобы не перечислять один и тот же
+# список в каждой цели. Заголовки тоже добавляю — тогда они видны в дереве
+# проекта в IDE.
 set(COMMON
         src/tape.cpp
         src/turing_machine.cpp
@@ -43,15 +42,16 @@ add_executable(tm-cli
         ${COMMON}
 )
 
-# Графическая версия (на SFML).
-# find_package ищет установленную в системе библиотеку SFML.
-# QUIET — не ругаться, если её нет; тогда SFML_FOUND будет ложным
-# и графическую версию мы просто не собираем, а консольная работает как обычно.
-find_package(SFML 2.5 COMPONENTS graphics window system QUIET)
-if (SFML_FOUND)
-    add_executable(tm-gui
-            src/gui_main.cpp
-            ${COMMON}
-    )
-    target_link_libraries(tm-gui sfml-graphics sfml-window sfml-system)
-endif ()
+# --- Тесты ---------------------------------------------------------
+# Каждый тест — отдельная маленькая программа со своим main.
+# Собираются вместе с проектом; запускать вручную: ./test_tape и т.д.
+# (в CLion появятся как отдельные цели рядом с tm-cli).
+add_executable(test_tape            examples/test_tape.cpp            ${COMMON})
+add_executable(turing_machine_test  examples/turing_machine_test.cpp  ${COMMON})
+add_executable(full_invert_test     examples/full_invert_test.cpp     ${COMMON})
+add_executable(compiler_invert_test examples/compiler_invert_test.cpp ${COMMON})
+add_executable(macros_test          examples/macros_test.cpp          ${COMMON})
+
+# compiler_add_test пока отключён: написан под старый API, и сложение
+# (emitAdd) ещё не доделано. Раскомментируем, когда починим.
+# add_executable(compiler_add_test examples/compiler_add_test.cpp ${COMMON})
