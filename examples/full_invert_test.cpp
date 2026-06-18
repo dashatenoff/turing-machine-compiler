@@ -3,24 +3,15 @@
 #include "compiler.h"
 #include "turing_machine.h"
 
-#include <fstream>
 #include <iostream>
-#include <sstream>
 
 int main()
 {
-    // читаем весь файл в строку
-    std::ifstream file("examples/invert.mt");
-
-    if (!file.is_open()) {
-        std::cout << "Cannot open invert.mt" << std::endl;
-        return 1;
-    }
-
-    std::stringstream buffer;
-    buffer << file.rdbuf();
-
-    std::string source = buffer.str();
+    // программа на нашем мини-языке прямо в тесте —
+    // так тест не зависит от того, из какой папки его запустили
+    std::string source =
+            "лента: 1011\n"
+            "инвертировать\n";
 
     // Lexer
     Lexer lexer(source);
