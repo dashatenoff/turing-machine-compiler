@@ -26,6 +26,8 @@ public:
     void loadTape1(const std::string& input);
     void loadTape2(const std::string& input);
 
+    std::string getCurrentState() const;
+
 private:
 
     Tape tape1;

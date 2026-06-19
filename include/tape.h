@@ -22,6 +22,8 @@ public:
 
     std::string toString() const;
 
+    std::map<long, char> getCells() const { return cells; }
+
 private:
 
     std::map<long, char> cells;

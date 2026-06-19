@@ -55,3 +55,17 @@ add_executable(macros_test          examples/macros_test.cpp          ${COMMON})
 # compiler_add_test пока отключён: написан под старый API, и сложение
 # (emitAdd) ещё не доделано. Раскомментируем, когда починим.
 # add_executable(compiler_add_test examples/compiler_add_test.cpp ${COMMON})
+set(RAYLIB_DIR ${CMAKE_SOURCE_DIR}/raylib)
+
+add_executable(tm-gui
+        src/gui_main.cpp
+        src/gui_render.cpp
+        ${COMMON}
+)
+
+target_include_directories(tm-gui PRIVATE
+        ${RAYLIB_DIR}/include
+        include
+)
+target_link_directories(tm-gui PRIVATE ${RAYLIB_DIR}/lib)
+target_link_libraries(tm-gui PRIVATE raylib winmm gdi32 opengl32)
