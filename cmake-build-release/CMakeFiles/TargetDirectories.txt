@@ -1,0 +1,8 @@
+C:/Users/dasha/CLionProjects/turing-machine-compiler/cmake-build-release/CMakeFiles/tm-cli.dir
+C:/Users/dasha/CLionProjects/turing-machine-compiler/cmake-build-release/CMakeFiles/test_tape.dir
+C:/Users/dasha/CLionProjects/turing-machine-compiler/cmake-build-release/CMakeFiles/turing_machine_test.dir
+C:/Users/dasha/CLionProjects/turing-machine-compiler/cmake-build-release/CMakeFiles/full_invert_test.dir
+C:/Users/dasha/CLionProjects/turing-machine-compiler/cmake-build-release/CMakeFiles/compiler_invert_test.dir
+C:/Users/dasha/CLionProjects/turing-machine-compiler/cmake-build-release/CMakeFiles/macros_test.dir
+C:/Users/dasha/CLionProjects/turing-machine-compiler/cmake-build-release/CMakeFiles/ALL_BUILD.dir
+C:/Users/dasha/CLionProjects/turing-machine-compiler/cmake-build-release/CMakeFiles/ZERO_CHECK.dir

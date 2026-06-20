@@ -1,0 +1,8 @@
+C:/Users/dasha/CLionProjects/turing-machine-compiler/cmake-build-debug/CMakeFiles/tm-cli.dir
+C:/Users/dasha/CLionProjects/turing-machine-compiler/cmake-build-debug/CMakeFiles/test_tape.dir
+C:/Users/dasha/CLionProjects/turing-machine-compiler/cmake-build-debug/CMakeFiles/turing_machine_test.dir
+C:/Users/dasha/CLionProjects/turing-machine-compiler/cmake-build-debug/CMakeFiles/full_invert_test.dir
+C:/Users/dasha/CLionProjects/turing-machine-compiler/cmake-build-debug/CMakeFiles/compiler_invert_test.dir
+C:/Users/dasha/CLionProjects/turing-machine-compiler/cmake-build-debug/CMakeFiles/macros_test.dir
+C:/Users/dasha/CLionProjects/turing-machine-compiler/cmake-build-debug/CMakeFiles/edit_cache.dir
+C:/Users/dasha/CLionProjects/turing-machine-compiler/cmake-build-debug/CMakeFiles/rebuild_cache.dir
