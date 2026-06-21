@@ -1,0 +1,11 @@
+# Зависимости
+/vcpkg/
+/raylib/
+
+# Сборка CLion/CMake
+/cmake-build-debug/
+/cmake-build-release/
+/cmake-build-*/
+
+# IDE
+/.idea/

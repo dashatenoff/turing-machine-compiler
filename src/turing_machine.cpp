@@ -103,3 +103,7 @@ void TuringMachine::loadTape2(const std::string& input){
         tape2.moveLeft();
     }
 }
+
+std::string TuringMachine::getCurrentState() const {
+    return currentState;
+}
