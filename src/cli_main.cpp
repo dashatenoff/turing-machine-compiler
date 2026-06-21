@@ -8,7 +8,7 @@
 #include "turing_machine.h"
 
 #ifdef _WIN32
-#include <windows.h>   // только для Windows: настройка кодовой страницы консоли
+#include <windows.h>   // только для Windows, настройка кодовой страницы консоли
 #endif
 
 //читает весь файл в строку
@@ -25,8 +25,7 @@ static std::string readFile(const std::string& path) {
 int main(int argc, char* argv[]) {
 
 #ifdef _WIN32
-    // Говорим консоли Windows, что вывод в UTF-8 — иначе русский текст
-    // показывается кракозябрами (╨У╨╛╤В╨╛╨▓╨╛ вместо «Готово»).
+    // Говорим консоли Windows, что вывод в UTF-8 
     SetConsoleOutputCP(CP_UTF8);
 #endif
 

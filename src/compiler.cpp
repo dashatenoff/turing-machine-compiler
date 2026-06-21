@@ -154,18 +154,7 @@ void Compiler::emitInvert(
 // emitAdd
 // лента1: A+B например "101+110"
 // лента2 на выходе содержит сумму A+B в двоичном виде
-//
-// алгоритм
-// фаза 1 copy_b: пропускаем A до '+' затем копируем B на ленту2 начиная с позиции 0
-// фаза 2 rewind1: только лента1 едет влево до '_' лента2 неподвижна
-// фаза 3 rewind2: только лента2 едет влево до '_' лента1 неподвижна
-// фаза 4 seek_end1: только лента1 едет вправо до '+' лента2 неподвижна
-//                   теперь лента1 стоит на '+' то есть сразу за LSB(A)
-// фаза 5 seek_end2: только лента2 едет вправо до '_' лента1 неподвижна
-//                   теперь лента2 стоит на '_' то есть сразу за LSB(B)
-// фаза 6 step_back: шагаем обе ленты влево на 1 теперь обе на LSB
-// фаза 7 add_nc/add_wc: складываем справа налево с переносом пишем на ленту2
-//                       стоп когда лента1 читает '_' (вышли за пределы A)
+
 void Compiler::emitAdd(
         const std::string& entry,
         const std::string& exit)
@@ -188,71 +177,20 @@ void Compiler::emitAdd(
     std::string rw1 = gen_.next("add_rewind1");
     addRule(copy_b, '_', '_', '_', '_', Move::Left, Move::Stay, rw1);
 
-    // едем влево по ленте1 через все символы B и '+'
+    // лента2 стоит на '_' следующий шаг влево 
+    std::string sb = gen_.next("add_step_back");
+
+    // едем влево по ленте1 до '+'
     addRule(rw1, '0', '_', '0', '_', Move::Left, Move::Stay, rw1);
     addRule(rw1, '1', '_', '1', '_', Move::Left, Move::Stay, rw1);
-    addRule(rw1, '+', '_', '+', '_', Move::Left, Move::Stay, rw1);
-    // лента2 может показывать что угодно пока она стоит но для правила нужен конкретный символ
-    // используем Stay на ленте2 и перечисляем все возможные символы ленты2
-    addRule(rw1, '0', '0', '0', '0', Move::Left, Move::Stay, rw1);
-    addRule(rw1, '1', '0', '1', '0', Move::Left, Move::Stay, rw1);
-    addRule(rw1, '0', '1', '0', '1', Move::Left, Move::Stay, rw1);
-    addRule(rw1, '1', '1', '1', '1', Move::Left, Move::Stay, rw1);
-    addRule(rw1, '+', '0', '+', '0', Move::Left, Move::Stay, rw1);
-    addRule(rw1, '+', '1', '+', '1', Move::Left, Move::Stay, rw1);
+    addRule(rw1, '+', '_', '+', '_', Move::Stay, Move::Stay, sb);
 
-    // лента1 дошла до '_' слева от A
-    // фаза 3 rewind2: только лента2 влево лента1 stay
-    std::string rw2 = gen_.next("add_rewind2");
-    addRule(rw1, '_', '_', '_', '_', Move::Stay, Move::Left, rw2);
-    addRule(rw1, '_', '0', '_', '0', Move::Stay, Move::Left, rw2);
-    addRule(rw1, '_', '1', '_', '1', Move::Stay, Move::Left, rw2);
-
-    addRule(rw2, '_', '0', '_', '0', Move::Stay, Move::Left, rw2);
-    addRule(rw2, '_', '1', '_', '1', Move::Stay, Move::Left, rw2);
-
-    // лента2 дошла до '_' слева от B
-    // фаза 4 seek_end1: только лента1 вправо до '+' лента2 stay
-    std::string se1 = gen_.next("add_seek_end1");
-    addRule(rw2, '_', '_', '_', '_', Move::Right, Move::Stay, se1);
-
-    addRule(se1, '0', '_', '0', '_', Move::Right, Move::Stay, se1);
-    addRule(se1, '1', '_', '1', '_', Move::Right, Move::Stay, se1);
-    addRule(se1, '0', '0', '0', '0', Move::Right, Move::Stay, se1);
-    addRule(se1, '1', '0', '1', '0', Move::Right, Move::Stay, se1);
-    addRule(se1, '0', '1', '0', '1', Move::Right, Move::Stay, se1);
-    addRule(se1, '1', '1', '1', '1', Move::Right, Move::Stay, se1);
-
-    // нашли '+' лента1 стоит на '+' то есть следующий шаг влево = LSB(A)
-    // фаза 5 seek_end2: только лента2 вправо до '_' лента1 stay
-    std::string se2 = gen_.next("add_seek_end2");
-    addRule(se1, '+', '_', '+', '_', Move::Stay, Move::Right, se2);
-    addRule(se1, '+', '0', '+', '0', Move::Stay, Move::Right, se2);
-    addRule(se1, '+', '1', '+', '1', Move::Stay, Move::Right, se2);
-
-    addRule(se2, '+', '0', '+', '0', Move::Stay, Move::Right, se2);
-    addRule(se2, '+', '1', '+', '1', Move::Stay, Move::Right, se2);
-
-    // лента2 стоит на '_' следующий шаг влево = LSB(B)
-    // фаза 6 step_back: обе ленты шагают влево на 1 теперь обе на LSB
-    std::string sb = gen_.next("add_step_back");
-    addRule(se2, '+', '_', '+', '_', Move::Left, Move::Left, sb);
-
-    // фаза 7 сложение справа налево
     // add_nc без переноса add_wc с переносом
     std::string add_nc = gen_.next("add_nc");
     std::string add_wc = gen_.next("add_wc");
 
-    // sb просто переход в add_nc
-    addRule(sb, '0', '0', '0', '0', Move::Stay, Move::Stay, add_nc);
-    addRule(sb, '1', '0', '1', '0', Move::Stay, Move::Stay, add_nc);
-    addRule(sb, '0', '1', '0', '1', Move::Stay, Move::Stay, add_nc);
-    addRule(sb, '1', '1', '1', '1', Move::Stay, Move::Stay, add_nc);
-    // если A короче B или наоборот
-    addRule(sb, '_', '0', '_', '0', Move::Stay, Move::Stay, add_nc);
-    addRule(sb, '_', '1', '_', '1', Move::Stay, Move::Stay, add_nc);
-    addRule(sb, '0', '_', '0', '_', Move::Stay, Move::Stay, add_nc);
-    addRule(sb, '1', '_', '1', '_', Move::Stay, Move::Stay, add_nc);
+
+    addRule(sb, '+', '_', '+', '_', Move::Left, Move::Left, add_nc);
 
     // add_nc без переноса
     // 0+0=0
@@ -265,13 +203,11 @@ void Compiler::emitAdd(
     addRule(add_nc, '1', '1', '1', '0', Move::Left, Move::Left, add_wc);
 
     // лента1 вышла за пределы A (читаем '_') но лента2 ещё есть данные
-    // это значит B длиннее A просто оставляем оставшиеся биты B как есть
     addRule(add_nc, '_', '0', '_', '0', Move::Stay, Move::Stay, exit);
     addRule(add_nc, '_', '1', '_', '1', Move::Stay, Move::Stay, exit);
     addRule(add_nc, '_', '_', '_', '_', Move::Stay, Move::Stay, exit);
 
     // лента2 вышла за пределы B но лента1 ещё есть данные
-    // это значит A длиннее B оставшиеся биты A копируем на ленту2
     addRule(add_nc, '0', '_', '0', '0', Move::Left, Move::Left, add_nc);
     addRule(add_nc, '1', '_', '1', '1', Move::Left, Move::Left, add_nc);
 
