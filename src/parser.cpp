@@ -1,7 +1,7 @@
 #include "parser.h"
 
 Parser::Parser(std::vector<Token> tokens)
-        : tokens_(std::move(tokens)), pos_(0) {}
+        : tokens_(std::move(tokens)), pos_(0) {}//парсер забирает себе владение вектором токенов
 
 
 std::unique_ptr<ProgramNode> Parser::parse() {
@@ -17,22 +17,19 @@ std::unique_ptr<ProgramNode> Parser::parseProgram() {
     node->tapeValue = str.value;
     node->line      = str.line;
 
-    //тело программы
+    //тело программы остальное
     while (!isAtEnd() && !check(TokenType::END_OF_FILE)) {
         node->body.push_back(parseStatement());
     }
 
     return node;
 }
-//один оператор программа или цикл
-NodePtr Parser::parseStatement() {
+NodePtr Parser::parseStatement() { //просто выбирет че вызвать
     const Token& t = peek();
 
     if (t.type == TokenType::WHILE)      return parseLoop();
     if (t.type == TokenType::CMD_INVERT) return parseCommand();
     if (t.type == TokenType::CMD_ADD)    return parseCommand();
-
-    // Неожиданный токен — понятное сообщение
     throw std::runtime_error(
             "Ожидалась команда или 'пока', "
             "но найдено '" + t.value + "' на строке " +
@@ -72,7 +69,10 @@ std::unique_ptr<LoopNode> Parser::parseLoop() {
 //одна команда
 std::unique_ptr<CommandNode> Parser::parseCommand() {
     auto node = std::make_unique<CommandNode>();
-    const Token& t = advance();
+    const Token& t = advance();//expect используется когда мы ожидаем конкретный токен и хотим
+    // автоматическую проверку с стандартным сообщением об ошибке голый advance()
+    // используется когда проверка типа уже была сделана раньше (как в parseCommand)
+    // либо когда нужно особое сообщение об ошибке
     node->line = t.line;
 
     if (t.type == TokenType::CMD_INVERT) {
@@ -84,14 +84,14 @@ std::unique_ptr<CommandNode> Parser::parseCommand() {
     return node;
 }
 
-//токены работа
+
 const Token& Parser::peek() const {
     return tokens_[pos_];
 }
 
 const Token& Parser::advance() {
     if (!isAtEnd()) pos_++;
-    return tokens_[pos_ - 1];
+    return tokens_[pos_ - 1];//возвращаем тот токен что съели
 }
 
 bool Parser::check(TokenType type) const {
@@ -102,7 +102,7 @@ bool Parser::isAtEnd() const {
     return tokens_[pos_].type == TokenType::END_OF_FILE;
 }
 
-const Token& Parser::expect(TokenType type, const std::string& where) {
+const Token& Parser::expect(TokenType type, const std::string& where) {//если тек токен нужного типа съедаем
     if (check(type)) return advance();
 
     throw std::runtime_error(

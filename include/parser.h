@@ -6,7 +6,7 @@
 #include "token.h"
 #include "ast.h"
 
-//Parser — строит AST из списка токенов
+//parser строит AST из списка токенов
 
 class Parser {
 public:

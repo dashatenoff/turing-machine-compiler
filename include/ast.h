@@ -2,9 +2,9 @@
 
 #include <string>
 #include <vector>
-#include <memory>
+#include <memory> //юник
 
-//базовый узел AST
+//базовый узел AST типа роодительский
 //чтобы добавить новый тип узла нужно создать новый struct наследник Node и добавить его в visit в Compiler
 
 struct Node {
@@ -16,12 +16,12 @@ using NodePtr = std::unique_ptr<Node>;
 
 //корень дерева  и есть вся программа
 struct ProgramNode : Node {
-    std::string          tapeValue;   // содержимое ленты
-    std::vector<NodePtr> body;  //список команд или циклов
-};
+    std::string          tapeValue;   //содержимое ленты 1 (ввод)
+    std::vector<NodePtr> body;  //список команд или циклов указатели тк боди может состоять из разных типов
+};//каждый узел хранит список своих детей через NodePtr
 
 //чтообы добавить новую команду: только новый CommandType всё остальное не меняется
-enum class CommandType {
+enum class CommandType {//parser его только записывает при создании узла сompiler его потом читает чтобы решить что делат
     INVERT,
     ADD,
 };
@@ -32,11 +32,11 @@ struct CommandNode : Node {
 
 //условие цикла пока
 enum class ConditionType {
-    HAS_BIT,  // есть_бит — tape1.read() != '_'
+    HAS_BIT,
 };
 
 //цикл пока условие: ... конец
-struct LoopNode : Node {
+struct LoopNode : Node {//каждый LoopNode несёт своё собственное тело поэтому циклы можно вкладывать друг в друга
     ConditionType        condition;
     std::vector<NodePtr> body; // тело цикла
 };

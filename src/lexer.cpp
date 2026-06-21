@@ -1,10 +1,10 @@
 #include "lexer.h"
-#include <unordered_map>
+#include <unordered_map> //нужна для таблицы ключевых слов реализованной как хэштаблица
 #include <stdexcept>
 
 // Таблица ключевых слов
 
-static const std::unordered_map<std::string, TokenType> keywords = {
+static const std::unordered_map<std::string, TokenType> keywords = { //переменная вижна только внутри лексера
         { "лента",          TokenType::TAPE       },
         { "пока",           TokenType::WHILE      },
         { "конец",          TokenType::END        },
@@ -20,14 +20,14 @@ std::vector<Token> Lexer::tokenize() {
     std::vector<Token> tokens;
 
     while (!isAtEnd()) {
-        skipWhitespace();
+        skipWhitespace();//цикл работает пока не дошли до конца текста
         if (isAtEnd()) break;
 
         char c = peek();
 
         if (c == ':') {
             advance();
-            tokens.push_back({ TokenType::COLON, "", line_ });
+            tokens.push_back({ TokenType::COLON, "", line_ });//создать временный объект Token сразу с тремя значениями без явного вызова конструктора
 
             //после "лента:" сразу читаем строку данных
             skipWhitespace();
@@ -44,7 +44,7 @@ std::vector<Token> Lexer::tokenize() {
         }
 
         //слово
-        if (c != ':' && c != '#' && c != '\n' && c != '\r' && c != ' ' && c != '\t') {
+        if (c != ':' && c != '#' && c != '\n' && c != '\r' && c != ' ' && c != '\t') {//если не разделители то слово
             tokens.push_back(readWord());
             continue;
         }
@@ -56,7 +56,7 @@ std::vector<Token> Lexer::tokenize() {
         );
     }
 
-    tokens.push_back({ TokenType::END_OF_FILE, "", line_ });
+    tokens.push_back({ TokenType::END_OF_FILE, "", line_ });//финалльный токен чтобы парсер знал токенов больше нет
     return tokens;
 }
 
