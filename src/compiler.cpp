@@ -135,17 +135,16 @@ std::string Compiler::compileLoop(
 }
 
 // emitInvert
-// лента1: 1 0 1 1 _       лента2: _ _ _ _ _
+
 // едем вправо по ленте1
 // каждый бит инвертируем и пишем на ленту2
-// '_' на ленте1 конец переходим в exit
 void Compiler::emitInvert(
         const std::string& entry,
         const std::string& exit)
 {
-    // '0' -> пишем '1' на ленту2 двигаемся вправо
+    // '0' пишем '1' на ленту2 двигаемся вправо
     addRule(entry, '0', '_', '0', '1', Move::Right, Move::Right, entry);
-    // '1' -> пишем '0' на ленту2 двигаемся вправо
+    // '1'  пишем '0' на ленту2 двигаемся вправо
     addRule(entry, '1', '_', '1', '0', Move::Right, Move::Right, entry);
     // '_' на ленте1 конец данных
     addRule(entry, '_', '_', '_', '_', Move::Stay, Move::Stay, exit);
