@@ -25,7 +25,8 @@ static std::string readFile(const std::string& path) {
 int main(int argc, char* argv[]) {
 
 #ifdef _WIN32
-    // Говорим консоли Windows, что вывод в UTF-8 
+    // Говорим консоли Windows, что вывод в UTF-8 — иначе русский текст
+    // показывается кракозябрами (╨У╨╛╤В╨╛╨▓╨╛ вместо «Готово»).
     SetConsoleOutputCP(CP_UTF8);
 #endif
 
@@ -47,6 +48,9 @@ int main(int argc, char* argv[]) {
         TuringMachine tm(program);
         tm.run();
         std::cout << "Готово. Шагов: " << tm.getsteps() << std::endl;
+        std::cout << "Tape2: "
+                  << tm.getTape2().toString()
+                  << std::endl;
 
     } catch (const std::exception& e) {
         std::cerr << "Ошибка: " << e.what() << std::endl;
