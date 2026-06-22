@@ -1,7 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
-#include "token.h"
+#include "..incl"
 #include "lexer.h"
 #include "parser.h"
 #include "compiler.h"

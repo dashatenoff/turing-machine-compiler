@@ -1,494 +1,513 @@
+// gui_render.cpp  —  ImGui + SDL2 + OpenGL3  (замена raylib)
 #include "gui_render.h"
-#include "raylib.h"
+
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_opengl.h>
+#include "imgui.h"
+#include "imgui_impl_sdl2.h"
+#include "imgui_impl_opengl3.h"
 
 #include <string>
 #include <vector>
 #include <algorithm>
-#include <sstream>
-#include <fstream>
+#include <cstring>
+#include <cmath>
 
-static Font gFont;
+// ─── цвета (те же что в оригинале) ───────────────────────────────────────────
+static ImVec4 c(int r,int g,int b,int a=255){
+    return {r/255.f,g/255.f,b/255.f,a/255.f};
+}
+static const ImVec4 BG          = c(30,  30,  46);
+static const ImVec4 PANEL       = c(45,  45,  68);
+static const ImVec4 CELL_NORMAL = c(60,  60,  90);
+static const ImVec4 CELL_HEAD   = c(231, 76,  60);
+static const ImVec4 CELL_DATA   = c(52,  152, 219);
+static const ImVec4 TEXT_MAIN   = c(236, 240, 241);
+static const ImVec4 TEXT_DIM    = c(127, 140, 141);
+static const ImVec4 BTN_GREEN   = c(39,  174, 96);
+static const ImVec4 BTN_BLUE    = c(41,  128, 185);
+static const ImVec4 BTN_ORANGE  = c(230, 126, 34);
+static const ImVec4 BTN_GRAY    = c(100, 100, 120);
+static const ImVec4 BTN_RED     = c(192, 57,  43);
 
-static const int CELL_W  = 44;
-static const int CELL_H  = 44;
-static const int VISIBLE = 12;
+static ImU32 toU32(ImVec4 v){
+    return IM_COL32(
+            (int)(v.x*255),(int)(v.y*255),
+            (int)(v.z*255),(int)(v.w*255));
+}
 
-static const Color BG          = { 30,  30,  46,  255 };
-static const Color PANEL       = { 45,  45,  68,  255 };
-static const Color CELL_NORMAL = { 60,  60,  90,  255 };
-static const Color CELL_HEAD   = { 231, 76,  60,  255 };
-static const Color CELL_DATA   = { 52,  152, 219, 255 };
-static const Color TEXT_MAIN   = { 236, 240, 241, 255 };
-static const Color TEXT_DIM    = { 127, 140, 141, 255 };
-static const Color BTN_GREEN   = { 39,  174, 96,  255 };
-static const Color BTN_BLUE    = { 41,  128, 185, 255 };
-static const Color BTN_ORANGE  = { 230, 126, 34,  255 };
-static const Color BTN_GRAY    = { 100, 100, 120, 255 };
-static const Color BTN_RED     = { 192, 57,  43,  255 };
+// ─── внутреннее состояние ────────────────────────────────────────────────────
+static SDL_Window*   s_window  = nullptr;
+static SDL_GLContext s_glctx   = nullptr;
+static bool          s_running = false;
 
 enum class Screen { EDITOR, RUNNING };
-static Screen gScreen       = Screen::EDITOR;
-static int    gSpeed        = 5;
-static int    gEditorScroll = 0;
-static bool gExamplesOpen = false;
-// позиция курсора в байтах в строке input.programText
-static int    gCursorPos    = 0;
+static Screen s_screen       = Screen::EDITOR;
+static int    s_speed        = 5;
+static bool   s_examplesOpen = false;
 
-// сколько кадров прошло с запуска — чтобы игнорировать phantom backspace
-static int    gFrameCount   = 0;
+// буфер редактора
+static char   s_textBuf[1 << 16] = {};
+static bool   s_textBufDirty     = true; // нужно ли синхронизировать из gi
 
-static void txt(const char* text, int x, int y, int size, Color col) {
-    DrawTextEx(gFont, text, { (float)x, (float)y }, (float)size, 1.0f, col);
+// ─── helpers ─────────────────────────────────────────────────────────────────
+
+// кнопка с нужным цветом
+static bool colorBtn(const char* label, ImVec4 col, ImVec2 size = {0,0}) {
+    ImGui::PushStyleColor(ImGuiCol_Button,        col);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(
+            std::min(col.x+0.12f,1.f),
+            std::min(col.y+0.12f,1.f),
+            std::min(col.z+0.12f,1.f), 1.f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(
+            std::max(col.x-0.1f,0.f),
+            std::max(col.y-0.1f,0.f),
+            std::max(col.z-0.1f,0.f), 1.f));
+    bool r = ImGui::Button(label, size);
+    ImGui::PopStyleColor(3);
+    return r;
 }
 
-static int measure(const char* text, int size) {
-    return (int)MeasureTextEx(gFont, text, (float)size, 1.0f).x;
+static void textCol(const char* s, ImVec4 col) {
+    ImGui::PushStyleColor(ImGuiCol_Text, col);
+    ImGui::TextUnformatted(s);
+    ImGui::PopStyleColor();
 }
 
-static bool btn(int x, int y, int w, int h, const char* text, Color col) {
-    Rectangle r = { (float)x, (float)y, (float)w, (float)h };
-    bool hover = CheckCollisionPointRec(GetMousePosition(), r);
-    Color c = hover ? Color{
-            (unsigned char)std::min(col.r + 30, 255),
-            (unsigned char)std::min(col.g + 30, 255),
-            (unsigned char)std::min(col.b + 30, 255), 255 } : col;
-    DrawRectangleRec(r, c);
-    DrawRectangleLinesEx(r, 1, { 200, 200, 200, 60 });
-    int tw = measure(text, 16);
-    txt(text, x + (w - tw) / 2, y + (h - 16) / 2, 16, TEXT_MAIN);
-    return hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
-}
+// ─── отрисовка одной ленты ────────────────────────────────────────────────────
+static void drawTape(const char* label, const TapeSnap& snap) {
+    const int VISIBLE = 12;
+    const float CELL_W = 44.f;
+    const float CELL_H = 44.f;
 
-static void drawTape(const TapeSnap& snap, int x, int y, const char* label) {
-    txt(label, x, y - 22, 14, TEXT_DIM);
+    textCol(label, TEXT_DIM);
+
+    ImDrawList* dl  = ImGui::GetWindowDrawList();
+    ImVec2      pos = ImGui::GetCursorScreenPos();
+
+    // треугольник над головкой (центр ячейки головки)
+    float headScreenX = pos.x + VISIBLE * (CELL_W + 2.f) + CELL_W * 0.5f;
+    float triY        = pos.y - 2.f;
+    dl->AddTriangleFilled(
+            {headScreenX,      triY},
+            {headScreenX - 7,  triY - 10},
+            {headScreenX + 7,  triY - 10},
+            toU32(CELL_HEAD));
+
     int total = VISIBLE * 2 + 1;
     for (int i = 0; i < total; i++) {
-        long pos     = snap.head + (i - VISIBLE);
-        auto it      = snap.cells.find(pos);
+        long cellPos = snap.head + (i - VISIBLE);
+        auto it      = snap.cells.find(cellPos);
         char ch      = (it != snap.cells.end()) ? it->second : '_';
         bool isHead  = (i == VISIBLE);
         bool hasData = (it != snap.cells.end() && ch != '_');
-        Color fill   = isHead ? CELL_HEAD : (hasData ? CELL_DATA : CELL_NORMAL);
-        Color border = isHead ? Color{255,100,80,255} : Color{80,80,120,255};
-        int cx = x + i * (CELL_W + 2);
-        DrawRectangle(cx, y, CELL_W, CELL_H, fill);
-        DrawRectangleLines(cx, y, CELL_W, CELL_H, border);
-        char tmp[2] = { ch, '\0' };
-        int tw = measure(tmp, 20);
-        txt(tmp, cx + (CELL_W - tw)/2, y + (CELL_H - 20)/2, 20,
-            isHead ? WHITE : TEXT_MAIN);
-        if (pos % 5 == 0) {
-            std::string ps = std::to_string(pos);
-            int pw = measure(ps.c_str(), 9);
-            txt(ps.c_str(), cx + (CELL_W - pw)/2, y + CELL_H + 3, 9, TEXT_DIM);
+
+        ImVec4 fillV  = isHead ? CELL_HEAD : (hasData ? CELL_DATA : CELL_NORMAL);
+        ImU32  fill   = toU32(fillV);
+        ImU32  border = isHead
+                        ? IM_COL32(255,100,80,255)
+                        : IM_COL32(80,80,120,255);
+
+        float cx = pos.x + i * (CELL_W + 2.f);
+        float cy = pos.y;
+
+        dl->AddRectFilled({cx,cy},{cx+CELL_W,cy+CELL_H}, fill, 3.f);
+        dl->AddRect      ({cx,cy},{cx+CELL_W,cy+CELL_H}, border, 3.f);
+
+        // символ по центру ячейки
+        char tmp[2] = {ch, '\0'};
+        ImVec2 tsz  = ImGui::CalcTextSize(tmp);
+        ImU32  tcol = isHead
+                      ? IM_COL32(255,255,255,255)
+                      : toU32(TEXT_MAIN);
+        dl->AddText(
+                {cx + (CELL_W - tsz.x)*0.5f, cy + (CELL_H - tsz.y)*0.5f},
+                tcol, tmp);
+
+        // номер позиции каждые 5
+        if (cellPos % 5 == 0) {
+            std::string ns = std::to_string(cellPos);
+            ImVec2 nsz = ImGui::CalcTextSize(ns.c_str());
+            dl->AddText(
+                    {cx + (CELL_W - nsz.x)*0.5f, cy + CELL_H + 3.f},
+                    toU32(TEXT_DIM), ns.c_str());
         }
     }
-    int hx = x + VISIBLE * (CELL_W + 2) + CELL_W / 2;
-    DrawTriangle(
-            { (float)hx,       (float)(y - 2)  },
-            { (float)(hx - 7), (float)(y - 12) },
-            { (float)(hx + 7), (float)(y - 12) },
-            CELL_HEAD
-    );
+
+    // двигаем курсор ImGui вниз на высоту ленты + подписи + стрелки
+    ImGui::Dummy({total*(CELL_W+2.f), CELL_H + 22.f});
+
+    // подпись "голова: N"
     std::string hp = "голова: " + std::to_string(snap.head);
-    txt(hp.c_str(), x, y + CELL_H + 16, 11, TEXT_DIM);
+    textCol(hp.c_str(), TEXT_DIM);
 }
 
-static std::vector<std::string> splitLines(const std::string& text) {
-    std::vector<std::string> lines;
-    std::string cur;
-    for (char c : text) {
-        if (c == '\n') { lines.push_back(cur); cur.clear(); }
-        else cur += c;
-    }
-    lines.push_back(cur);
-    return lines;
-}
-
-// длина utf8 символа по первому байту
-static int utf8CharLen(unsigned char c) {
-    if (c < 0x80) return 1;
-    if ((c & 0xE0) == 0xC0) return 2;
-    if ((c & 0xF0) == 0xE0) return 3;
-    return 1;
-}
-
-// вставляет utf8 codepoint в строку на позиции pos возвращает новую позицию
-static int insertCodepoint(std::string& s, int pos, int cp) {
-    std::string enc;
-    if (cp < 0x80) {
-        enc += (char)cp;
-    } else if (cp < 0x800) {
-        enc += (char)(0xC0 | (cp >> 6));
-        enc += (char)(0x80 | (cp & 0x3F));
-    } else {
-        enc += (char)(0xE0 | (cp >> 12));
-        enc += (char)(0x80 | ((cp >> 6) & 0x3F));
-        enc += (char)(0x80 | (cp & 0x3F));
-    }
-    s.insert(pos, enc);
-    return pos + (int)enc.size();
-}
-
-// удаляет utf8 символ перед позицией pos возвращает новую позицию
-static int deleteBeforeCursor(std::string& s, int pos) {
-    if (pos <= 0) return 0;
-    int end = pos;
-    pos--;
-    while (pos > 0 && (s[pos] & 0xC0) == 0x80) pos--;
-    s.erase(pos, end - pos);
-    return pos;
-}
-
-// возвращает байтовую позицию в тексте по клику мыши в редакторе
-static int posFromClick(
-        const std::string& text,
-        int mouseX, int mouseY,
-        int edX, int edY, int lineH, int scroll, int fontSize)
-{
-    std::vector<std::string> lines = splitLines(text);
-    int clickedLine = (mouseY - edY) / lineH + scroll;
-    clickedLine = std::max(0, std::min(clickedLine, (int)lines.size() - 1));
-
-    // находим байтовое начало строки clickedLine в тексте
-    int byteOffset = 0;
-    for (int i = 0; i < clickedLine; i++) {
-        byteOffset += (int)lines[i].size() + 1; // +1 за \n
-    }
-
-    // внутри строки ищем ближайший символ по x
-    const std::string& line = lines[clickedLine];
-    int bestPos = 0;
-    int bestDist = 99999;
-    int byteIdx = 0;
-    int x = edX;
-    // проверяем позицию перед каждым символом
-    while (true) {
-        int dist = std::abs(mouseX - x);
-        if (dist < bestDist) { bestDist = dist; bestPos = byteOffset + byteIdx; }
-        if (byteIdx >= (int)line.size()) break;
-        // ширина одного utf8 символа
-        int clen = utf8CharLen((unsigned char)line[byteIdx]);
-        std::string ch = line.substr(byteIdx, clen);
-        x += measure(ch.c_str(), fontSize);
-        byteIdx += clen;
-    }
-    return bestPos;
-}
-
+// ─── init / close ────────────────────────────────────────────────────────────
 bool guiInit(int w, int h) {
-    InitWindow(w, h, "Машина Тьюринга");
-    SetTargetFPS(60);
+    if (SDL_Init(SDL_INIT_VIDEO) != 0) return false;
 
-    int codepointCount = 0;
-    int codepoints[300];
-    for (int i = 32; i < 127; i++)
-        codepoints[codepointCount++] = i;
-    for (int i = 0x0410; i <= 0x044F; i++)
-        codepoints[codepointCount++] = i;
-    codepoints[codepointCount++] = 0x0401;
-    codepoints[codepointCount++] = 0x0451;
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 
-    gFont = LoadFontEx("C:/Windows/Fonts/arial.ttf", 20, codepoints, codepointCount);
-    SetTextureFilter(gFont.texture, TEXTURE_FILTER_BILINEAR);
+    s_window = SDL_CreateWindow(
+            "Машина Тьюринга",
+            SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+            w, h,
+            SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+    if (!s_window) { SDL_Quit(); return false; }
+
+    s_glctx = SDL_GL_CreateContext(s_window);
+    SDL_GL_SetSwapInterval(1);
+
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+
+    // шрифт с кириллицей — arial лежит на любом Windows
+    static const ImWchar ranges[] = {
+            0x0020, 0x00FF,
+            0x0400, 0x04FF,
+            0,
+    };
+    ImFontConfig cfg;
+    cfg.OversampleH = 2;
+    ImFont* fnt = io.Fonts->AddFontFromFileTTF(
+            "C:/Windows/Fonts/arial.ttf", 15.f, &cfg, ranges);
+    if (!fnt) io.Fonts->AddFontDefault();
+
+    // стиль: тёмный, как оригинал
+    ImGui::StyleColorsDark();
+    ImGuiStyle& st = ImGui::GetStyle();
+    st.WindowRounding    = 0.f;
+    st.FrameRounding     = 3.f;
+    st.ScrollbarRounding = 3.f;
+    st.WindowBorderSize  = 0.f;
+    st.Colors[ImGuiCol_WindowBg]  = BG;
+    st.Colors[ImGuiCol_ChildBg]   = PANEL;
+    st.Colors[ImGuiCol_FrameBg]   = c(40,40,62);
+    st.Colors[ImGuiCol_ScrollbarBg]   = c(40,40,62);
+    st.Colors[ImGuiCol_ScrollbarGrab] = c(100,100,120);
+    st.Colors[ImGuiCol_Text]      = TEXT_MAIN;
+
+    ImGui_ImplSDL2_InitForOpenGL(s_window, s_glctx);
+    ImGui_ImplOpenGL3_Init("#version 330");
+
+    s_running = true;
     return true;
 }
 
 void guiClose() {
-    UnloadFont(gFont);
-    CloseWindow();
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplSDL2_Shutdown();
+    ImGui::DestroyContext();
+    SDL_GL_DeleteContext(s_glctx);
+    SDL_DestroyWindow(s_window);
+    SDL_Quit();
 }
 
-bool guiShouldClose() {
-    return WindowShouldClose();
-}
+bool guiShouldClose() { return !s_running; }
+void guiSwitchToRunning() { s_screen = Screen::RUNNING; }
+void guiSwitchToEditor()  { s_screen = Screen::EDITOR;  }
+int  guiGetSpeed()        { return s_speed; }
 
-GuiEvent guiFrame(GuiState& state, GuiInput& input) {
-    gFrameCount++;
+// ─── главный кадр ────────────────────────────────────────────────────────────
+GuiEvent guiFrame(GuiState& gs, GuiInput& gi) {
     GuiEvent ev = GuiEvent::NONE;
-    int SW = GetScreenWidth();
-    int SH = GetScreenHeight();
 
-    static const int ED_X      = 58;
-    static const int ED_NUM_X  = 28;
-    static const int ED_Y      = 88;
-    static const int ED_LINE_H = 17;
-    static const int ED_MAX_Y  = 262;
-    static const int ED_VISIBLE = (ED_MAX_Y - ED_Y) / ED_LINE_H;
-    static const int ED_FONT   = 13;
+    // SDL события
+    SDL_Event e;
+    while (SDL_PollEvent(&e)) {
+        ImGui_ImplSDL2_ProcessEvent(&e);
+        if (e.type == SDL_QUIT) s_running = false;
+    }
 
-    // клампим курсор
-    gCursorPos = std::max(0, std::min(gCursorPos, (int)input.programText.size()));
-
-    if (gScreen == Screen::EDITOR) {
-
-        // символы
-        int key = GetCharPressed();
-        while (key > 0) {
-            if (input.programText.size() < 2000) {
-                gCursorPos = insertCodepoint(input.programText, gCursorPos, key);
-            }
-            key = GetCharPressed();
-        }
-
-        // Enter
-        if (IsKeyPressed(KEY_ENTER)) {
-            input.programText.insert(gCursorPos, "\n");
-            gCursorPos++;
-        }
-
-        // Backspace — игнорируем первые 5 кадров чтобы убрать phantom
-        if (gFrameCount > 5 && IsKeyPressed(KEY_BACKSPACE)) {
-            gCursorPos = deleteBeforeCursor(input.programText, gCursorPos);
-        }
-
-        // стрелки влево/вправо
-        if (IsKeyPressed(KEY_LEFT) && gCursorPos > 0) {
-            gCursorPos--;
-            while (gCursorPos > 0 &&
-                   (input.programText[gCursorPos] & 0xC0) == 0x80)
-                gCursorPos--;
-        }
-        if (IsKeyPressed(KEY_RIGHT) &&
-            gCursorPos < (int)input.programText.size()) {
-            int clen = utf8CharLen(
-                    (unsigned char)input.programText[gCursorPos]);
-            gCursorPos += clen;
-        }
-
-        // скролл колесом
-        float wheel = GetMouseWheelMove();
-        if (wheel != 0)
-            gEditorScroll -= (int)wheel;
-
-        // клик мышью — позиция курсора
-        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-            Vector2 mp = GetMousePosition();
-            if (mp.x >= 20 && mp.x <= SW - 20 &&
-                mp.y >= ED_Y && mp.y < ED_MAX_Y) {
-                gCursorPos = posFromClick(
-                        input.programText,
-                        (int)mp.x, (int)mp.y,
-                        ED_X, ED_Y, ED_LINE_H,
-                        gEditorScroll, ED_FONT);
-            }
+    // синхронизируем буфер если снаружи изменился programText (загрузка примера)
+    {
+        static std::string lastKnown;
+        if (gi.programText != lastKnown) {
+            lastKnown = gi.programText;
+            strncpy(s_textBuf, gi.programText.c_str(), sizeof(s_textBuf)-1);
+            s_textBuf[sizeof(s_textBuf)-1] = '\0';
         }
     }
 
-    BeginDrawing();
-    ClearBackground(BG);
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplSDL2_NewFrame();
+    ImGui::NewFrame();
 
-    if (gScreen == Screen::EDITOR) {
+    int ww, wh;
+    SDL_GetWindowSize(s_window, &ww, &wh);
 
-        txt("Машина Тьюринга", 20, 12, 22, TEXT_MAIN);
-        txt("компилятор РУССКОГО языка", 20, 38, 13, TEXT_DIM);
+    // полноэкранное окно без рамки
+    ImGui::SetNextWindowPos({0,0});
+    ImGui::SetNextWindowSize({(float)ww,(float)wh});
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {16.f, 10.f});
+    ImGui::Begin("##root", nullptr,
+                 ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                 ImGuiWindowFlags_NoMove     | ImGuiWindowFlags_NoBringToFrontOnFocus);
+    ImGui::PopStyleVar();
 
-        DrawRectangle(20, 65, SW - 40, 205, PANEL);
-        DrawRectangleLines(20, 65, SW - 40, 205, {80,80,120,255});
-        txt("Программа (.mt):", ED_NUM_X, 70, 12, TEXT_DIM);
+    // ══════════════════════════════════════════════════════════════════════════
+    if (s_screen == Screen::EDITOR) {
+        // ══════════════════════════════════════════════════════════════════════════
 
-        std::vector<std::string> lines = splitLines(input.programText);
-        int totalLines = (int)lines.size();
+        // заголовок
+        ImGui::PushStyleColor(ImGuiCol_Text, TEXT_MAIN);
+        ImGui::SetWindowFontScale(1.4f);
+        ImGui::Text("Машина Тьюринга");
+        ImGui::SetWindowFontScale(1.f);
+        ImGui::PopStyleColor();
 
-        // находим строку и колонку курсора
-        int cursorLine = 0, cursorByte = 0;
-        {
-            int byteCount = 0;
-            for (int i = 0; i < (int)lines.size(); i++) {
-                int lineEnd = byteCount + (int)lines[i].size();
-                if (gCursorPos <= lineEnd) {
-                    cursorLine = i;
-                    cursorByte = gCursorPos - byteCount;
-                    break;
-                }
-                byteCount += (int)lines[i].size() + 1;
-                cursorLine = i;
-                cursorByte = (int)lines[i].size();
-            }
+        ImGui::PushStyleColor(ImGuiCol_Text, TEXT_DIM);
+        ImGui::Text("компилятор РУССКОГО языка");
+        ImGui::PopStyleColor();
+
+        ImGui::Spacing();
+
+        // панель редактора
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, PANEL);
+        ImGui::PushStyleColor(ImGuiCol_Text, TEXT_DIM);
+        ImGui::Text("Программа (.mt):");
+        ImGui::PopStyleColor();
+
+        // поле ввода — высота ~12 строк как в оригинале
+        float editorH = 205.f;
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, c(40,40,62));
+        ImGui::PushStyleColor(ImGuiCol_Text, TEXT_MAIN);
+        if (ImGui::InputTextMultiline(
+                "##prog", s_textBuf, sizeof(s_textBuf),
+                {(float)ww - 32.f, editorH},
+                ImGuiInputTextFlags_AllowTabInput)) {
+            gi.programText = s_textBuf;
         }
+        ImGui::PopStyleColor(2);
+        ImGui::PopStyleColor(); // ChildBg
 
-        // автоскролл к курсору
-        if (cursorLine - gEditorScroll >= ED_VISIBLE)
-            gEditorScroll = cursorLine - ED_VISIBLE + 1;
-        if (cursorLine < gEditorScroll)
-            gEditorScroll = cursorLine;
-        if (gEditorScroll < 0) gEditorScroll = 0;
-        if (gEditorScroll > std::max(0, totalLines - 1))
-            gEditorScroll = std::max(0, totalLines - 1);
+        ImGui::Spacing();
 
-        BeginScissorMode(20, ED_Y - 2, SW - 40, ED_MAX_Y - ED_Y + 4);
-        for (int i = gEditorScroll; i < totalLines; i++) {
-            int ly = ED_Y + (i - gEditorScroll) * ED_LINE_H;
-            if (ly >= ED_MAX_Y) break;
-
-            // подсветка текущей строки
-            if (i == cursorLine)
-                DrawRectangle(20, ly - 1, SW - 42, ED_LINE_H,
-                              {70, 70, 100, 255});
-
-            // номер строки
-            txt(std::to_string(i + 1).c_str(), ED_NUM_X, ly, 12, TEXT_DIM);
-
-            // текст строки
-            txt(lines[i].c_str(), ED_X, ly, ED_FONT, TEXT_MAIN);
-
-            // курсор
-            if (i == cursorLine && (int)(GetTime() * 2) % 2 == 0) {
-                std::string before = lines[i].substr(0, cursorByte);
-                int cx = ED_X + measure(before.c_str(), ED_FONT);
-                DrawRectangle(cx, ly, 2, ED_LINE_H - 2, TEXT_MAIN);
-            }
-        }
-        EndScissorMode();
-
-        // скроллбар
-        if (totalLines > ED_VISIBLE) {
-            int sbX = SW - 32;
-            int sbH = ED_MAX_Y - ED_Y;
-            DrawRectangle(sbX, ED_Y, 6, sbH, {60,60,90,255});
-            int thumbH = std::max(16, sbH * ED_VISIBLE / totalLines);
-            int maxSc  = std::max(1, totalLines - ED_VISIBLE);
-            int thumbY = ED_Y + (sbH - thumbH) * gEditorScroll / maxSc;
-            DrawRectangle(sbX, thumbY, 6, thumbH, BTN_GRAY);
-        }
-
-        // кнопки
-        if (btn(20, 278, 220, 36, "Компилировать", BTN_GREEN))
+        // кнопка Компилировать
+        if (colorBtn("Компилировать", BTN_GREEN, {220, 36}))
             ev = GuiEvent::COMPILE;
 
-        // кнопка "Примеры" с выпадающим списком из экзаймплс
-        {
-            bool openedNow = btn(250, 278, 130, 36, "Примеры =)", BTN_GRAY);
-            if (openedNow) gExamplesOpen = !gExamplesOpen;
+        ImGui::SameLine();
 
-            if (gExamplesOpen) {
-                int dropX = 250;
-                int dropY = 318;
-                int dropW = 260;
-                int rowH  = 28;
-                int count = (int)input.exampleNames.size();
-                int dropH = count > 0 ? count * rowH + 8 : 36;
+        // кнопка Примеры + дропдаун
+        if (colorBtn("Примеры =)", BTN_GRAY, {130, 36}))
+            s_examplesOpen = !s_examplesOpen;
 
-                DrawRectangle(dropX, dropY, dropW, dropH, PANEL);
-                DrawRectangleLines(dropX, dropY, dropW, dropH, {80,80,120,255});
+        if (s_examplesOpen) {
+            ImGui::SetNextWindowPos({
+                                            ImGui::GetItemRectMin().x,
+                                            ImGui::GetItemRectMax().y + 2.f});
+            ImGui::SetNextWindowSize({260.f, 0.f});
+            ImGui::PushStyleColor(ImGuiCol_PopupBg, PANEL);
+            ImGui::PushStyleColor(ImGuiCol_Text, TEXT_MAIN);
+            if (ImGui::Begin("##drop", nullptr,
+                             ImGuiWindowFlags_NoTitleBar  |
+                             ImGuiWindowFlags_NoResize    |
+                             ImGuiWindowFlags_NoMove      |
+                             ImGuiWindowFlags_NoScrollbar |
+                             ImGuiWindowFlags_NoSavedSettings)) {
 
-                if (count == 0) {
-                    txt("нет файлов .mt", dropX + 10, dropY + 10, 13, TEXT_DIM);
+                if (gi.exampleNames.empty()) {
+                    ImGui::PushStyleColor(ImGuiCol_Text, TEXT_DIM);
+                    ImGui::Text("нет файлов .mt");
+                    ImGui::PopStyleColor();
                 } else {
-                    for (int i = 0; i < count; i++) {
-                        int ry = dropY + 4 + i * rowH;
-                        Rectangle r = { (float)dropX, (float)ry, (float)dropW, (float)rowH };
-                        bool hover = CheckCollisionPointRec(GetMousePosition(), r);
-                        if (hover) DrawRectangleRec(r, {70, 70, 100, 255});
-
-                        txt(input.exampleNames[i].c_str(), dropX + 10, ry + 6, 14, TEXT_MAIN);
-
-                        if (hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-                            input.selectedExample = i;
+                    for (int i = 0; i < (int)gi.exampleNames.size(); i++) {
+                        if (ImGui::Selectable(gi.exampleNames[i].c_str())) {
+                            gi.selectedExample = i;
                             ev = GuiEvent::LOAD_EXAMPLE;
-                            gExamplesOpen = false;
+                            s_examplesOpen = false;
                         }
                     }
                 }
 
-                // клик мимо списка — закрыть
-                if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) &&
-                    !CheckCollisionPointRec(GetMousePosition(),
-                                            { (float)dropX, (float)dropY, (float)dropW, (float)dropH }) &&
-                    !openedNow) {
-                    gExamplesOpen = false;
-                }
+                // клик мимо — закрыть
+                if (!ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup) &&
+                    ImGui::IsMouseClicked(0))
+                    s_examplesOpen = false;
+
+                ImGui::End();
             }
-        }
-        txt("Синтаксис:", 20, 328, 12, TEXT_DIM);
-        txt("лента: <данные>", 20, 344, 12, TEXT_MAIN);
-        txt("инвертировать", 20, 360, 12, TEXT_MAIN);
-        txt("сложить   (A+B, например 101+110)", 20, 376, 12, TEXT_MAIN);
-        txt("пока есть_бит:", 20, 392, 12, TEXT_MAIN);
-        txt("  инвертировать", 20, 408, 12, TEXT_MAIN);
-        txt("конец", 20, 424, 12, TEXT_MAIN);
-
-        int logTop = 448;
-        DrawRectangle(20, logTop, SW - 40, SH - logTop - 28, PANEL);
-        txt("Лог:", 28, logTop + 4, 11, TEXT_DIM);
-        int logY  = logTop + 18;
-        int start = std::max(0, (int)state.logLines.size() - 9);
-        for (int i = start;
-             i < (int)state.logLines.size() && logY < SH - 32; i++) {
-            txt(state.logLines[i].c_str(), 28, logY, 11, TEXT_MAIN);
-            logY += 15;
+            ImGui::PopStyleColor(2);
         }
 
-        txt(state.statusMsg.c_str(), 20, SH - 20, 11, TEXT_DIM);
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
 
+        // подсказка синтаксиса
+        ImGui::PushStyleColor(ImGuiCol_Text, TEXT_DIM);
+        ImGui::Text("Синтаксис:");
+        ImGui::PopStyleColor();
+        ImGui::PushStyleColor(ImGuiCol_Text, TEXT_MAIN);
+        ImGui::Text("лента: <данные>");
+        ImGui::Text("инвертировать");
+        ImGui::Text("сложить   (A+B, например 101+110)");
+        ImGui::Text("пока есть_бит:");
+        ImGui::Text("  инвертировать");
+        ImGui::Text("конец");
+        ImGui::PopStyleColor();
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        // лог
+        ImGui::PushStyleColor(ImGuiCol_Text, TEXT_DIM);
+        ImGui::Text("Лог:");
+        ImGui::PopStyleColor();
+
+        float logH = (float)wh - ImGui::GetCursorPosY() - 30.f;
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, PANEL);
+        ImGui::BeginChild("##log", {0, logH}, true);
+        ImGui::PushStyleColor(ImGuiCol_Text, TEXT_MAIN);
+        int start = std::max(0, (int)gs.logLines.size() - 9);
+        for (int i = start; i < (int)gs.logLines.size(); i++)
+            ImGui::TextUnformatted(gs.logLines[i].c_str());
+        ImGui::PopStyleColor();
+        ImGui::EndChild();
+        ImGui::PopStyleColor();
+
+        // статус внизу
+        ImGui::PushStyleColor(ImGuiCol_Text, TEXT_DIM);
+        ImGui::Text("%s", gs.statusMsg.c_str());
+        ImGui::PopStyleColor();
+
+        // ══════════════════════════════════════════════════════════════════════════
     } else { // RUNNING
+        // ══════════════════════════════════════════════════════════════════════════
 
-        txt("Визуализация", 20, 8, 18, TEXT_MAIN);
+        // заголовок
+        ImGui::PushStyleColor(ImGuiCol_Text, TEXT_MAIN);
+        ImGui::SetWindowFontScale(1.2f);
+        ImGui::Text("Визуализация");
+        ImGui::SetWindowFontScale(1.f);
+        ImGui::PopStyleColor();
 
-        std::string stStr = state.halted ? "HALT" : state.currentState;
-        txt("Состояние:", 20, 32, 12, TEXT_DIM);
-        txt(stStr.c_str(), 115, 32, 13, state.halted ? BTN_RED : BTN_GREEN);
-        std::string stps = "Шагов: " + std::to_string(state.steps);
-        txt(stps.c_str(), 350, 32, 13, TEXT_DIM);
-        if (!state.result.empty()) {
-            std::string rs = "Результат: " + state.result;
-            txt(rs.c_str(), 600, 32, 13, BTN_GREEN);
+        ImGui::SameLine(200);
+        ImGui::PushStyleColor(ImGuiCol_Text, TEXT_DIM);
+        ImGui::Text("Состояние:");
+        ImGui::PopStyleColor();
+        ImGui::SameLine();
+        ImGui::PushStyleColor(ImGuiCol_Text,
+                              gs.halted ? BTN_RED : BTN_GREEN);
+        ImGui::Text("%s", gs.halted ? "HALT" : gs.currentState.c_str());
+        ImGui::PopStyleColor();
+
+        ImGui::SameLine(500);
+        ImGui::PushStyleColor(ImGuiCol_Text, TEXT_DIM);
+        ImGui::Text("Шагов: %ld", gs.steps);
+        ImGui::PopStyleColor();
+
+        if (!gs.result.empty()) {
+            ImGui::SameLine(700);
+            ImGui::PushStyleColor(ImGuiCol_Text, BTN_GREEN);
+            ImGui::Text("Результат: %s", gs.result.c_str());
+            ImGui::PopStyleColor();
         }
 
-        drawTape(state.tape1, 20, 80,  "Лента 1  (входная)");
-        drawTape(state.tape2, 20, 195, "Лента 2  (выходная)");
+        ImGui::Spacing();
 
-        DrawLine(0, 280, SW, 280, {80,80,120,180});
+        // ленты
+        drawTape("Лента 1  (входная)",  gs.tape1);
+        ImGui::Spacing();
+        drawTape("Лента 2  (выходная)", gs.tape2);
 
-        int bx = 20, by = 288, bh = 36;
-        if (btn(bx,     by, 90,  bh, "Шаг",        BTN_BLUE))   ev = GuiEvent::STEP;
-        if (btn(bx+100, by, 90,  bh,
-                state.halted ? "Готово" : "Пуск",   BTN_GREEN))  ev = GuiEvent::RUN;
-        if (btn(bx+200, by, 90,  bh, "Пауза",      BTN_ORANGE)) ev = GuiEvent::PAUSE;
-        if (btn(bx+300, by, 90,  bh, "Сброс",      BTN_GRAY))   ev = GuiEvent::RESET;
-        if (btn(bx+400, by, 140, bh, "< Редактор", BTN_GRAY)) {
-            gScreen = Screen::EDITOR;
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        // кнопки управления
+        if (colorBtn("Шаг",    BTN_BLUE,   {90,36})) ev = GuiEvent::STEP;
+        ImGui::SameLine();
+        if (colorBtn(gs.halted ? "Готово" : "Пуск", BTN_GREEN, {90,36}))
+            ev = GuiEvent::RUN;
+        ImGui::SameLine();
+        if (colorBtn("Пауза",  BTN_ORANGE, {90,36})) ev = GuiEvent::PAUSE;
+        ImGui::SameLine();
+        if (colorBtn("Сброс",  BTN_GRAY,   {90,36})) ev = GuiEvent::RESET;
+        ImGui::SameLine();
+        if (colorBtn("< Редактор", BTN_GRAY, {140,36})) {
+            s_screen = Screen::EDITOR;
             ev = GuiEvent::BACK_TO_EDITOR;
         }
 
-        txt("Скорость:", bx+555, by+10, 12, TEXT_DIM);
-        if (btn(bx+640, by+4, 26, 26, "-", BTN_GRAY)) {
-            gSpeed = std::max(1, gSpeed - 1);
+        // скорость кнопками + / -  (как в оригинале)
+        ImGui::SameLine(700);
+        ImGui::PushStyleColor(ImGuiCol_Text, TEXT_DIM);
+        ImGui::Text("Скорость:");
+        ImGui::PopStyleColor();
+        ImGui::SameLine();
+        if (colorBtn("-##spd", BTN_GRAY, {26,26})) {
+            s_speed = std::max(1, s_speed - 1);
             ev = GuiEvent::SPEED_DOWN;
         }
-        txt(std::to_string(gSpeed).c_str(), bx+672, by+10, 14, TEXT_MAIN);
-        if (btn(bx+690, by+4, 26, 26, "+", BTN_GRAY)) {
-            gSpeed = std::min(10, gSpeed + 1);
+        ImGui::SameLine();
+        ImGui::PushStyleColor(ImGuiCol_Text, TEXT_MAIN);
+        ImGui::Text("%d", s_speed);
+        ImGui::PopStyleColor();
+        ImGui::SameLine();
+        if (colorBtn("+##spd", BTN_GRAY, {26,26})) {
+            s_speed = std::min(10, s_speed + 1);
             ev = GuiEvent::SPEED_UP;
         }
 
-        DrawRectangle(20, 335, SW - 40, 190, PANEL);
-        txt("Лог:", 28, 340, 11, TEXT_DIM);
-        int logY  = 355;
-        int start = std::max(0, (int)state.logLines.size() - 11);
-        for (int i = start;
-             i < (int)state.logLines.size() && logY < 520; i++) {
-            txt(state.logLines[i].c_str(), 28, logY, 11, TEXT_MAIN);
-            logY += 15;
-        }
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
 
-        DrawLine(0, 530, SW, 530, {80,80,120,180});
+        // лог
+        ImGui::PushStyleColor(ImGuiCol_Text, TEXT_DIM);
+        ImGui::Text("Лог:");
+        ImGui::PopStyleColor();
 
+        float logH = (float)wh - ImGui::GetCursorPosY() - 60.f;
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, PANEL);
+        ImGui::BeginChild("##log2", {0, logH}, true);
+        ImGui::PushStyleColor(ImGuiCol_Text, TEXT_MAIN);
+        int start = std::max(0, (int)gs.logLines.size() - 11);
+        for (int i = start; i < (int)gs.logLines.size(); i++)
+            ImGui::TextUnformatted(gs.logLines[i].c_str());
+        if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY())
+            ImGui::SetScrollHereY(1.f);
+        ImGui::PopStyleColor();
+        ImGui::EndChild();
+        ImGui::PopStyleColor();
+
+        ImGui::Separator();
+
+        // сырые данные лент внизу
+        ImGui::PushStyleColor(ImGuiCol_Text, TEXT_DIM);
         std::string t1raw = "Лента 1: ";
-        for (auto& [p,c] : state.tape1.cells) if (c != '_') t1raw += c;
-        std::string t2raw = "Лента 2: ";
-        for (auto& [p,c] : state.tape2.cells) if (c != '_') t2raw += c;
-        txt(t1raw.c_str(), 20, 537, 11, TEXT_DIM);
-        txt(t2raw.c_str(), 20, 552, 11,
-            state.halted ? BTN_GREEN : TEXT_DIM);
+        for (auto& [p,ch] : gs.tape1.cells) if (ch != '_') t1raw += ch;
+        ImGui::Text("%s", t1raw.c_str());
+        ImGui::PopStyleColor();
 
-        txt(state.statusMsg.c_str(), 20, SH - 20, 11, TEXT_DIM);
+        ImGui::PushStyleColor(ImGuiCol_Text,
+                              gs.halted ? BTN_GREEN : TEXT_DIM);
+        std::string t2raw = "Лента 2: ";
+        for (auto& [p,ch] : gs.tape2.cells) if (ch != '_') t2raw += ch;
+        ImGui::Text("%s", t2raw.c_str());
+        ImGui::PopStyleColor();
+
+        ImGui::PushStyleColor(ImGuiCol_Text, TEXT_DIM);
+        ImGui::Text("%s", gs.statusMsg.c_str());
+        ImGui::PopStyleColor();
     }
 
-    EndDrawing();
+    ImGui::End();
+
+    // рендер
+    ImGui::Render();
+    glViewport(0, 0, ww, wh);
+    glClearColor(BG.x, BG.y, BG.z, 1.f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    SDL_GL_SwapWindow(s_window);
+
     return ev;
 }
-
-void guiSwitchToRunning() { gScreen = Screen::RUNNING; }
-void guiSwitchToEditor()  { gScreen = Screen::EDITOR;  }
-int  guiGetSpeed()        { return gSpeed; }

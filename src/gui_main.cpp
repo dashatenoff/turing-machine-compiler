@@ -1,4 +1,3 @@
-// сначала наши заголовки
 #include "gui_render.h"
 #include "lexer.h"
 #include "parser.h"
@@ -6,8 +5,6 @@
 #include "turing_machine.h"
 
 #ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
 #include <windows.h>
 #endif
 
