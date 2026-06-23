@@ -1,7 +1,6 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
-#include "..incl"
 #include "lexer.h"
 #include "parser.h"
 #include "compiler.h"
