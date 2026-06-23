@@ -44,7 +44,6 @@ static bool          s_running = false;
 enum class Screen { EDITOR, RUNNING };
 static Screen s_screen       = Screen::EDITOR;
 static int    s_speed        = 5;
-static bool   s_examplesOpen = false;
 
 // буфер редактора
 static char   s_textBuf[1 << 16] = {};
@@ -293,47 +292,38 @@ GuiEvent guiFrame(GuiState& gs, GuiInput& gi) {
 
         ImGui::SameLine();
 
-        // кнопка Примеры + дропдаун
-        if (colorBtn("Примеры =)", BTN_GRAY, {130, 36}))
-            s_examplesOpen = !s_examplesOpen;
+        // кнопка Примеры + выпадающий список.
+        // Через штатный popup ImGui (OpenPopup/BeginPopup): он сам корректно
+        // держит фокус и z-order и закрывается по клику мимо. Раньше список
+        // рисовался отдельным окном поверх полноэкранного ##root, и клики по
+        // нему перехватывал ##root — пример не вставлялся.
+        bool examplesBtn = colorBtn("Примеры =)", BTN_GRAY, {130, 36});
+        ImVec2 exMin = ImGui::GetItemRectMin();
+        ImVec2 exMax = ImGui::GetItemRectMax();
+        if (examplesBtn)
+            ImGui::OpenPopup("##examples_popup");
 
-        if (s_examplesOpen) {
-            ImGui::SetNextWindowPos({
-                                            ImGui::GetItemRectMin().x,
-                                            ImGui::GetItemRectMax().y + 2.f});
-            ImGui::SetNextWindowSize({260.f, 0.f});
-            ImGui::PushStyleColor(ImGuiCol_PopupBg, PANEL);
-            ImGui::PushStyleColor(ImGuiCol_Text, TEXT_MAIN);
-            if (ImGui::Begin("##drop", nullptr,
-                             ImGuiWindowFlags_NoTitleBar  |
-                             ImGuiWindowFlags_NoResize    |
-                             ImGuiWindowFlags_NoMove      |
-                             ImGuiWindowFlags_NoScrollbar |
-                             ImGuiWindowFlags_NoSavedSettings)) {
-
-                if (gi.exampleNames.empty()) {
-                    ImGui::PushStyleColor(ImGuiCol_Text, TEXT_DIM);
-                    ImGui::Text("нет файлов .mt");
-                    ImGui::PopStyleColor();
-                } else {
-                    for (int i = 0; i < (int)gi.exampleNames.size(); i++) {
-                        if (ImGui::Selectable(gi.exampleNames[i].c_str())) {
-                            gi.selectedExample = i;
-                            ev = GuiEvent::LOAD_EXAMPLE;
-                            s_examplesOpen = false;
-                        }
+        // прижимаем popup под кнопку
+        ImGui::SetNextWindowPos({exMin.x, exMax.y + 2.f});
+        ImGui::PushStyleColor(ImGuiCol_PopupBg, PANEL);
+        ImGui::PushStyleColor(ImGuiCol_Text, TEXT_MAIN);
+        if (ImGui::BeginPopup("##examples_popup")) {
+            if (gi.exampleNames.empty()) {
+                ImGui::PushStyleColor(ImGuiCol_Text, TEXT_DIM);
+                ImGui::TextUnformatted("нет файлов .mt");
+                ImGui::PopStyleColor();
+            } else {
+                for (int i = 0; i < (int)gi.exampleNames.size(); i++) {
+                    if (ImGui::Selectable(gi.exampleNames[i].c_str())) {
+                        gi.selectedExample = i;
+                        ev = GuiEvent::LOAD_EXAMPLE;
+                        ImGui::CloseCurrentPopup();
                     }
                 }
-
-                // клик мимо — закрыть
-                if (!ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup) &&
-                    ImGui::IsMouseClicked(0))
-                    s_examplesOpen = false;
-
-                ImGui::End();
             }
-            ImGui::PopStyleColor(2);
+            ImGui::EndPopup();
         }
+        ImGui::PopStyleColor(2);
 
         ImGui::Spacing();
         ImGui::Separator();
