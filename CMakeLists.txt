@@ -17,9 +17,6 @@ set(COMMON
         src/lexer.cpp
         src/parser.cpp
         src/compiler.cpp
-        src/macros.cpp
-        src/tm_program.cpp
-        src/tm_format.cpp
 )
 
 include_directories(include)
@@ -30,7 +27,6 @@ add_executable(test_tape            examples/test_tape.cpp            ${COMMON})
 add_executable(turing_machine_test  examples/turing_machine_test.cpp  ${COMMON})
 add_executable(full_invert_test     examples/full_invert_test.cpp     ${COMMON})
 add_executable(compiler_invert_test examples/compiler_invert_test.cpp ${COMMON})
-add_executable(macros_test          examples/macros_test.cpp          ${COMMON})
 
 # ── GUI (ImGui + SDL2 + OpenGL) ──────────────────────────────────────────────
 
