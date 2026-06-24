@@ -53,8 +53,7 @@ bool TMFormat::load(const std::string& filename, TMProgram& program) {
     program.rules.clear();
     std::string line;
     std::getline(file, line);
-    
+
     file >> program.startState;
-
-
+    return true;
 }

@@ -1,4 +1,4 @@
-// gui_render.cpp  —  ImGui + SDL2 + OpenGL3  (замена raylib)
+// ImGui + SDL2 + OpenGL3 
 #include "gui_render.h"
 
 #include <SDL2/SDL.h>
@@ -13,7 +13,7 @@
 #include <cstring>
 #include <cmath>
 
-// ─── цвета (те же что в оригинале) ───────────────────────────────────────────
+// создаём цвета
 static ImVec4 c(int r,int g,int b,int a=255){
     return {r/255.f,g/255.f,b/255.f,a/255.f};
 }
@@ -36,7 +36,7 @@ static ImU32 toU32(ImVec4 v){
             (int)(v.z*255),(int)(v.w*255));
 }
 
-// ─── внутреннее состояние ────────────────────────────────────────────────────
+// внутреннее состояние 
 static SDL_Window*   s_window  = nullptr;
 static SDL_GLContext s_glctx   = nullptr;
 static bool          s_running = false;
@@ -49,7 +49,6 @@ static int    s_speed        = 5;
 static char   s_textBuf[1 << 16] = {};
 static bool   s_textBufDirty     = true; // нужно ли синхронизировать из gi
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
 
 // кнопка с нужным цветом
 static bool colorBtn(const char* label, ImVec4 col, ImVec2 size = {0,0}) {
@@ -73,7 +72,7 @@ static void textCol(const char* s, ImVec4 col) {
     ImGui::PopStyleColor();
 }
 
-// ─── отрисовка одной ленты ────────────────────────────────────────────────────
+//  отрисовка одной ленты 
 static void drawTape(const char* label, const TapeSnap& snap) {
     const int VISIBLE = 12;
     const float CELL_W = 44.f;
@@ -84,7 +83,7 @@ static void drawTape(const char* label, const TapeSnap& snap) {
     ImDrawList* dl  = ImGui::GetWindowDrawList();
     ImVec2      pos = ImGui::GetCursorScreenPos();
 
-    // треугольник над головкой (центр ячейки головки)
+    // треугольник над головкой 
     float headScreenX = pos.x + VISIBLE * (CELL_W + 2.f) + CELL_W * 0.5f;
     float triY        = pos.y - 2.f;
     dl->AddTriangleFilled(
@@ -141,7 +140,7 @@ static void drawTape(const char* label, const TapeSnap& snap) {
     textCol(hp.c_str(), TEXT_DIM);
 }
 
-// ─── init / close ────────────────────────────────────────────────────────────
+// init / close 
 bool guiInit(int w, int h) {
     if (SDL_Init(SDL_INIT_VIDEO) != 0) return false;
 
@@ -176,7 +175,7 @@ bool guiInit(int w, int h) {
             "C:/Windows/Fonts/arial.ttf", 15.f, &cfg, ranges);
     if (!fnt) io.Fonts->AddFontDefault();
 
-    // стиль: тёмный, как оригинал
+    // стиль тёмный
     ImGui::StyleColorsDark();
     ImGuiStyle& st = ImGui::GetStyle();
     st.WindowRounding    = 0.f;
@@ -211,7 +210,7 @@ void guiSwitchToRunning() { s_screen = Screen::RUNNING; }
 void guiSwitchToEditor()  { s_screen = Screen::EDITOR;  }
 int  guiGetSpeed()        { return s_speed; }
 
-// ─── главный кадр ────────────────────────────────────────────────────────────
+//  главный кадр 
 GuiEvent guiFrame(GuiState& gs, GuiInput& gi) {
     GuiEvent ev = GuiEvent::NONE;
 
@@ -248,9 +247,9 @@ GuiEvent guiFrame(GuiState& gs, GuiInput& gi) {
                  ImGuiWindowFlags_NoMove     | ImGuiWindowFlags_NoBringToFrontOnFocus);
     ImGui::PopStyleVar();
 
-    // ══════════════════════════════════════════════════════════════════════════
+
     if (s_screen == Screen::EDITOR) {
-        // ══════════════════════════════════════════════════════════════════════════
+
 
         // заголовок
         ImGui::PushStyleColor(ImGuiCol_Text, TEXT_MAIN);
@@ -367,9 +366,7 @@ GuiEvent guiFrame(GuiState& gs, GuiInput& gi) {
         ImGui::Text("%s", gs.statusMsg.c_str());
         ImGui::PopStyleColor();
 
-        // ══════════════════════════════════════════════════════════════════════════
     } else { // RUNNING
-        // ══════════════════════════════════════════════════════════════════════════
 
         // заголовок
         ImGui::PushStyleColor(ImGuiCol_Text, TEXT_MAIN);

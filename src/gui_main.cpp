@@ -31,11 +31,8 @@ static void refreshState(GuiState& gs, TuringMachine* tm, bool halted) {
     if (halted) gs.result = tm->getTape2().toString();
 }
 
-// ─────────────────────────────────────────────
+
 //  Ищет examples/ рядом с рабочей директорией.
-//  Проверяет несколько вероятных путей подряд —
-//  CLion и запуск из консоли стартуют из разных мест.
-// ─────────────────────────────────────────────
 static fs::path findExamplesDir() {
     std::vector<fs::path> candidates = {
             "examples",
@@ -48,13 +45,12 @@ static fs::path findExamplesDir() {
             return p;
         }
     }
-    return fs::path(); // не нашли — пустой путь
+    return fs::path(); // — пустой путь
 }
 
-// ─────────────────────────────────────────────
+
 //  Сканирует папку examples, собирает все .mt файлы.
-//  Возвращает пары: имя_без_расширения -> полный_путь
-// ─────────────────────────────────────────────
+//  Возвращает пары, имя_без_расширения - полный_путь
 static std::vector<std::pair<std::string, fs::path>> scanExamples() {
     std::vector<std::pair<std::string, fs::path>> result;
     fs::path dir = findExamplesDir();
@@ -68,6 +64,7 @@ static std::vector<std::pair<std::string, fs::path>> scanExamples() {
     return result;
 }
 
+//прочитать файл целиком в одну строку
 static std::string readFileToString(const fs::path& path) {
     std::ifstream file(path);
     if (!file.is_open()) return "";
@@ -83,12 +80,12 @@ int main() {
 
     guiInit(1100, 700);
 
-    GuiState gs;
-    GuiInput gi;
+    GuiState gs; // Хранит то, что показывается пользователю
+    GuiInput gi; // Хранит то, что пользователь вводит
     gi.programText = "лента: 101+110\nсложить";
     gs.statusMsg   = "Введите программу и нажмите Компилировать";
 
-    // ── Автозагрузка списка примеров из examples/ ──
+    //Автозагрузка списка примеров
     auto examples = scanExamples();
     for (const auto& [name, path] : examples) {
         gi.exampleNames.push_back(name);
@@ -134,7 +131,7 @@ int main() {
 
         switch (ev) {
 
-            // ── Загрузка примера по клику ──
+            //Загрузка примера по клику 
             case GuiEvent::LOAD_EXAMPLE: {
                 if (gi.selectedExample >= 0 &&
                     gi.selectedExample < (int)examples.size()) {
