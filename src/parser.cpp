@@ -66,7 +66,6 @@ std::unique_ptr<LoopNode> Parser::parseLoop() {
     return node;
 }
 
-//одна команда
 std::unique_ptr<CommandNode> Parser::parseCommand() {
     auto node = std::make_unique<CommandNode>();
     const Token& t = advance();//expect используется когда мы ожидаем конкретный токен и хотим

@@ -7,7 +7,7 @@
 //stateGenerator выдаёт уникальные имена состояний машины тьюринга
 class StateGenerator {
 public:
-    //HALT зарезервирован как стоп-состояние
+    //HALT зарезервирован как конечное состояние
     static constexpr const char* HALT  = "HALT";
     static constexpr const char* START = "start";
 
@@ -26,12 +26,7 @@ public:
     static std::string halt()  { return HALT;  }
     static std::string start() { return START; }
 
-    //использовалось ли имя
-    bool isUsed(const std::string& name) const {
-        return used_.count(name) > 0;
-    }
-
 private:
     int                          counter_ = 0;
-    std::unordered_set<std::string> used_;
+    std::unordered_set<std::string> used_;//хэш множетсво уник сост
 };

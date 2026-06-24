@@ -1,7 +1,7 @@
 #include "compiler.h"
 #include <stdexcept>
 
-// вспомогательный метод добавляет одно правило чтобы не копировать код и не ошибиться
+//прост вспомогательный метод добавляет одно правило чтобы не копировать код и не ошибиться
 void Compiler::addRule(
         const std::string& cur,
         char r1, char r2,
@@ -19,10 +19,10 @@ TMProgram Compiler::compile(const ProgramNode& program) {
 
     std::string entry = StateGenerator::start();
 
-    // обходим тело каждый узел получает entry возвращает exit а exit становится следующим entry
+    // compileBody обходит узлы а каждый узел сам знает как себя скомпилировать
     std::string last = compileBody(program.body, entry);
 
-    // последнее состояние -> HALT stay на обеих лентах тогда головки не двигаются
+    //соединяем последнее состояние с HALT
     addRule(last, '_', '_', '_', '_', Move::Stay, Move::Stay, StateGenerator::halt());
     addRule(last, '0', '_', '0', '_', Move::Stay, Move::Stay, StateGenerator::halt());
     addRule(last, '1', '_', '1', '_', Move::Stay, Move::Stay, StateGenerator::halt());
@@ -40,101 +40,84 @@ std::string Compiler::compileBody(
         const std::string& entry)
 {
     std::string cur = entry;
-    for (const auto& node : body) {
-        cur = compileStatement(*node, cur);
+    for (const NodePtr& node : body) {
+        cur = node->compile(*this, cur);
     }
     return cur;
 }
 
-std::string Compiler::compileStatement(
-        const Node& node,
-        const std::string& entry)
-{
-    if (const auto* cmd = dynamic_cast<const CommandNode*>(&node)) {
-        return compileCommand(*cmd, entry);
-    }
-    if (const auto* loop = dynamic_cast<const LoopNode*>(&node)) {
-        return compileLoop(*loop, entry);
-    }
-    throw std::runtime_error(
-            "Compiler: неизвестный тип узла на строке " +
-            std::to_string(node.line)
-    );
+//реализации виртуальных методов
+
+std::string ProgramNode::compile(Compiler& compiler, const std::string& entry) const {
+    //ProgramNode компилирует своё тело
+    return compiler.compileBody(body, entry);
 }
 
-// вызывает нужный макрос
-std::string Compiler::compileCommand(
-        const CommandNode& node,
-        const std::string& entry)
-{
-    std::string exit = gen_.next(
-            node.command == CommandType::INVERT ? "invert" : "add"
+std::string CommandNode::compile(Compiler& compiler, const std::string& entry) const {
+    std::string exit = compiler.gen_.next(
+            command == CommandType::INVERT ? "invert" : "add"
     );
 
-    switch (node.command) {
+    switch (command) {
         case CommandType::INVERT:
-            emitInvert(entry, exit);
+            compiler.emitInvert(entry, exit);
             break;
         case CommandType::ADD:
-            emitAdd(entry, exit);
+            compiler.emitAdd(entry, exit);
             break;
         default:
             throw std::runtime_error(
-                    "Compiler: неизвестная команда на строке " +
-                    std::to_string(node.line)
+                    "неизвестная команда на строке " + std::to_string(line)
             );
     }
     return exit;
 }
 
-std::string Compiler::compileLoop(
-        const LoopNode& node,
-        const std::string& entry)
-{
-    std::string cond = gen_.next("while_cond");
-    std::string exit = gen_.next("while_exit");
+std::string LoopNode::compile(Compiler& compiler, const std::string& entry) const {
+    std::string cond      = compiler.gen_.next("while_cond");
+    std::string exit      = compiler.gen_.next("while_exit");
 
-    // entry -> cond просто переход stay на обоих лентах
-    addRule(entry, '0', '_', '0', '_', Move::Stay, Move::Stay, cond);
-    addRule(entry, '1', '_', '1', '_', Move::Stay, Move::Stay, cond);
-    addRule(entry, '_', '_', '_', '_', Move::Stay, Move::Stay, cond);
-    addRule(entry, '0', '0', '0', '0', Move::Stay, Move::Stay, cond);
-    addRule(entry, '1', '0', '1', '0', Move::Stay, Move::Stay, cond);
-    addRule(entry, '0', '1', '0', '1', Move::Stay, Move::Stay, cond);
-    addRule(entry, '1', '1', '1', '1', Move::Stay, Move::Stay, cond);
+    //entry -> cond переход stay на обоих лентах чтобы работатть уже с состоянием проверки условия цикла
+    //комбинации '_' на ленте 1 с чем угодно на ленте 2 мы не включаем сюда тк они обрабатываются в блоке cond
+    compiler.addRule(entry, '0', '_', '0', '_', Move::Stay, Move::Stay, cond);
+    compiler.addRule(entry, '1', '_', '1', '_', Move::Stay, Move::Stay, cond);
+    compiler.addRule(entry, '_', '_', '_', '_', Move::Stay, Move::Stay, cond);
+    compiler.addRule(entry, '0', '0', '0', '0', Move::Stay, Move::Stay, cond);
+    compiler.addRule(entry, '1', '0', '1', '0', Move::Stay, Move::Stay, cond);
+    compiler.addRule(entry, '0', '1', '0', '1', Move::Stay, Move::Stay, cond);
+    compiler.addRule(entry, '1', '1', '1', '1', Move::Stay, Move::Stay, cond);
 
-    // cond если '_' на ленте 1 условие ложно выходим
-    if (node.condition == ConditionType::HAS_BIT) {
-        addRule(cond, '_', '_', '_', '_', Move::Stay, Move::Stay, exit);
-        addRule(cond, '_', '0', '_', '0', Move::Stay, Move::Stay, exit);
-        addRule(cond, '_', '1', '_', '1', Move::Stay, Move::Stay, exit);
+    // cond если '_' на ленте1 условие ложно выходим
+    if (condition == ConditionType::HAS_BIT) {
+        compiler.addRule(cond, '_', '_', '_', '_', Move::Stay, Move::Stay, exit);
+        compiler.addRule(cond, '_', '0', '_', '0', Move::Stay, Move::Stay, exit);
+        compiler.addRule(cond, '_', '1', '_', '1', Move::Stay, Move::Stay, exit);
     }
 
     // cond если не '_' условие истинно идём в тело
-    std::string bodyEntry = gen_.next("while_body");
-    addRule(cond, '0', '_', '0', '_', Move::Stay, Move::Stay, bodyEntry);
-    addRule(cond, '1', '_', '1', '_', Move::Stay, Move::Stay, bodyEntry);
-    addRule(cond, '0', '0', '0', '0', Move::Stay, Move::Stay, bodyEntry);
-    addRule(cond, '1', '0', '1', '0', Move::Stay, Move::Stay, bodyEntry);
-    addRule(cond, '0', '1', '0', '1', Move::Stay, Move::Stay, bodyEntry);
-    addRule(cond, '1', '1', '1', '1', Move::Stay, Move::Stay, bodyEntry);
+    //bodyEntry новое уникальное имя для точки входа в тело цикла
+    std::string bodyEntry = compiler.gen_.next("while_body");
+    compiler.addRule(cond, '0', '_', '0', '_', Move::Stay, Move::Stay, bodyEntry);
+    compiler.addRule(cond, '1', '_', '1', '_', Move::Stay, Move::Stay, bodyEntry);
+    compiler.addRule(cond, '0', '0', '0', '0', Move::Stay, Move::Stay, bodyEntry);
+    compiler.addRule(cond, '1', '0', '1', '0', Move::Stay, Move::Stay, bodyEntry);
+    compiler.addRule(cond, '0', '1', '0', '1', Move::Stay, Move::Stay, bodyEntry);
+    compiler.addRule(cond, '1', '1', '1', '1', Move::Stay, Move::Stay, bodyEntry);
 
-    // компилируем тело последнее состояние тела должно вернуться обратно в cond
-    std::string bodyExit = compileBody(node.body, bodyEntry);
+    // компилируем тело рекурсивно
+    std::string bodyExit = compiler.compileBody(body, bodyEntry);
 
-    // bodyExit -> cond замыкаем цикл
-    addRule(bodyExit, '0', '_', '0', '_', Move::Stay, Move::Stay, cond);
-    addRule(bodyExit, '1', '_', '1', '_', Move::Stay, Move::Stay, cond);
-    addRule(bodyExit, '_', '_', '_', '_', Move::Stay, Move::Stay, cond);
-    addRule(bodyExit, '0', '0', '0', '0', Move::Stay, Move::Stay, cond);
-    addRule(bodyExit, '1', '0', '1', '0', Move::Stay, Move::Stay, cond);
-    addRule(bodyExit, '0', '1', '0', '1', Move::Stay, Move::Stay, cond);
-    addRule(bodyExit, '1', '1', '1', '1', Move::Stay, Move::Stay, cond);
+    //bodyExit -> cond замыкаем цикл
+    compiler.addRule(bodyExit, '0', '_', '0', '_', Move::Stay, Move::Stay, cond);
+    compiler.addRule(bodyExit, '1', '_', '1', '_', Move::Stay, Move::Stay, cond);
+    compiler.addRule(bodyExit, '_', '_', '_', '_', Move::Stay, Move::Stay, cond);
+    compiler.addRule(bodyExit, '0', '0', '0', '0', Move::Stay, Move::Stay, cond);
+    compiler.addRule(bodyExit, '1', '0', '1', '0', Move::Stay, Move::Stay, cond);
+    compiler.addRule(bodyExit, '0', '1', '0', '1', Move::Stay, Move::Stay, cond);
+    compiler.addRule(bodyExit, '1', '1', '1', '1', Move::Stay, Move::Stay, cond);
 
     return exit;
 }
-
-// emitInvert
 
 // едем вправо по ленте1
 // каждый бит инвертируем и пишем на ленту2
