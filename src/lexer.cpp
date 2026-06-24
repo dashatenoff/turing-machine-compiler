@@ -27,12 +27,16 @@ std::vector<Token> Lexer::tokenize() {
 
         if (c == ':') {
             advance();
-            tokens.push_back({ TokenType::COLON, "", line_ });//создать временный объект Token сразу с тремя значениями без явного вызова конструктора
+            tokens.push_back({ TokenType::COLON, "", line_ });
 
-            //после "лента:" сразу читаем строку данных
-            skipWhitespace();
-            if (!isAtEnd() && peek() != '\n') {
-                tokens.push_back(readString());
+            // строку данных читаем только после "лента:", не после "есть_бит:"
+            bool afterTape = tokens.size() >= 2 &&
+                             tokens[tokens.size()-2].type == TokenType::TAPE;
+            if (afterTape) {
+                while (!isAtEnd() && (peek() == ' ' || peek() == '\t')) advance();
+                if (!isAtEnd() && peek() != '\n' && peek() != '\r') {
+                    tokens.push_back(readString());
+                }
             }
             continue;
         }
