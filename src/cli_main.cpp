@@ -24,8 +24,7 @@ static std::string readFile(const std::string& path) {
 int main(int argc, char* argv[]) {
 
 #ifdef _WIN32
-    // Говорим консоли Windows, что вывод в UTF-8 — иначе русский текст
-    // показывается кракозябрами (╨У╨╛╤В╨╛╨▓╨╛ вместо «Готово»).
+
     SetConsoleOutputCP(CP_UTF8);
 #endif
 
